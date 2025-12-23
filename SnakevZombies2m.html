@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Snake vs Zombies (Mobile)</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --text:#e9eefc;
+      --muted:#a9b3d6;
+
+      --player:#2f7dff;
+      --hunter1:#b84cff;
+      --hunter2:#ff5aa5;
+      --zombie:#7dff7d;
+      --danger:#ff3b3b;
+
+      --tree:#2bd46f;
+      --orn:#ffcc3b;
+      --grid:rgba(255,255,255,0.06);
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:radial-gradient(1200px 600px at 50% 30%, #13224a 0%, var(--bg) 55%);
+      color:var(--text);
+      font-family:system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      -webkit-text-size-adjust:100%;
+      overscroll-behavior:none;
+      touch-action:none; /* prevent scroll while playing */
+      user-select:none;
+      -webkit-user-select:none;
+    }
+
+    .wrap{
+      height:100%;
+      width:100%;
+      max-width: 980px;
+      margin:0 auto;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      padding:10px;
+    }
+
+    .topbar{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      padding:10px 12px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:12px;
+      backdrop-filter:blur(6px);
+    }
+
+    .title{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:10px;
+      line-height:1.1;
+    }
+    .title strong{font-size:16px}
+    .title span{font-size:12px;color:var(--muted)}
+
+    .stats{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .pill{
+      padding:6px 10px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.10);
+      color:var(--text);
+      font-size:12px;
+      font-variant-numeric:tabular-nums;
+      white-space:nowrap;
+    }
+
+    .btns{
+      display:flex;
+      gap:8px;
+      margin-left:auto;
+    }
+    button{
+      appearance:none;
+      border:1px solid rgba(255,255,255,0.14);
+      background:rgba(255,255,255,0.06);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:10px;
+      font-weight:800;
+      font-size:13px;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:active{transform:translateY(1px)}
+    button:hover{background:rgba(255,255,255,0.10)}
+
+    .board{
+      position:relative;
+      flex:1;
+      border-radius:14px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,0.10);
+      background:rgba(255,255,255,0.04);
+      touch-action:none;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:10px;
+    }
+
+    /* KEY FIXES for iPhone:
+       - explicit width/height attributes in HTML (below)
+       - aspect-ratio here to prevent collapsed canvas height
+    */
+    canvas{
+      display:block;
+      width:100%;
+      height:auto;
+      aspect-ratio: 900 / 540;
+      background:rgba(0,0,0,0.15);
+      border-radius:12px;
+      touch-action:none;
+    }
+
+    .toast{
+      position:absolute;
+      left:12px; right:12px; bottom:12px;
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(0,0,0,0.55);
+      border:1px solid rgba(255,255,255,0.12);
+      color:var(--text);
+      display:none;
+      font-size:13px;
+      pointer-events:none;
+    }
+    .toast.show{display:block}
+
+    .controls{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      padding:10px 0 0;
+    }
+
+    .dpad{
+      display:grid;
+      grid-template-columns:56px 56px 56px;
+      grid-template-rows:56px 56px 56px;
+      gap:10px;
+      user-select:none;
+      -webkit-user-select:none;
+      touch-action:none;
+    }
+    .dpad button{
+      width:56px;height:56px;
+      border-radius:16px;
+      font-size:20px;
+      line-height:1;
+      padding:0;
+      background:rgba(0,0,0,0.35);
+      border:1px solid rgba(255,255,255,0.18);
+    }
+    .dpad .empty{opacity:0; pointer-events:none;}
+
+    .help{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.2;
+      text-align:right;
+      max-width: 220px;
+    }
+
+    .legend{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:center;
+      font-size:12px;
+      color:var(--muted);
+      padding-top:6px;
+    }
+    .dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="title">
+        <strong>Snake vs Zombies</strong>
+        <span>Mobile-only: swipe or D-pad</span>
+      </div>
+      <div class="stats">
+        <div class="pill">Time: <span id="time">0</span>s</div>
+        <div class="pill">Player: <span id="pLen">3</span></div>
+        <div class="pill">H1: <span id="h1Len">4</span> (<span id="h1Lives">3</span>❤)</div>
+        <div class="pill">H2: <span id="h2Len">4</span> (<span id="h2Lives">3</span>❤)</div>
+        <div class="pill">Z: <span id="zLeft">5</span></div>
+        <div class="pill">Orn: <span id="ornCount">0</span></div>
+        <div class="pill">Tree: <span id="treeHP">2</span></div>
+        <div class="btns">
+          <button id="btnStart" type="button">Start</button>
+          <button id="btnPause" type="button">Pause</button>
+          <button id="btnRestart" type="button">Restart</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="board" id="board">
+      <!-- IMPORTANT: width/height attributes prevent iOS collapsed canvas -->
+      <canvas id="c" width="900" height="540"></canvas>
+      <div id="toast" class="toast"></div>
+    </div>
+
+    <div class="controls">
+      <div class="dpad" id="dpad" aria-label="Controls">
+        <button class="empty" tabindex="-1"></button>
+        <button data-dir="up" aria-label="Up">▲</button>
+        <button class="empty" tabindex="-1"></button>
+
+        <button data-dir="left" aria-label="Left">◀</button>
+        <button data-dir="pause" aria-label="Pause/Resume">⏯</button>
+        <button data-dir="right" aria-label="Right">▶</button>
+
+        <button class="empty" tabindex="-1"></button>
+        <button data-dir="down" aria-label="Down">▼</button>
+        <button class="empty" tabindex="-1"></button>
+      </div>
+
+      <div class="help">
+        Swipe on the field or use the arrows.<br/>
+        No self-collision.<br/>
+        Hurdles remove 1 section.<br/>
+        Eat the tree twice to win.
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><span class="dot" style="background:var(--player)"></span>Player</span>
+      <span><span class="dot" style="background:var(--hunter1)"></span>Hunter 1</span>
+      <span><span class="dot" style="background:var(--hunter2)"></span>Hunter 2</span>
+      <span><span class="dot" style="background:var(--zombie)"></span>Zombies</span>
+      <span><span class="dot" style="background:var(--danger)"></span>Walls/Hurdles</span>
+      <span><span class="dot" style="background:var(--orn)"></span>Ornaments</span>
+      <span><span class="dot" style="background:var(--tree)"></span>Tree</span>
+    </div>
+  </div>
+
+  <script>
+    // =========================
+    // Snake vs Zombies (Mobile-only)
+    // Fixes:
+    // - Canvas width/height attributes restored (prevents iOS 0-height canvas)
+    // - CSS aspect-ratio added (extra safety)
+    // - Mobile swipe + D-pad only (no keyboard reliance)
+    // =========================
+
+    const board = document.getElementById("board");
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d", { alpha: true });
+
+    const LOGICAL_W = 900;
+    const LOGICAL_H = 540;
+
+    const COLS = 45;
+    const ROWS = 27;
+    const CELL = LOGICAL_W / COLS;
+
+    const SPEED_MS = 85;
+
+    const HUNTER_SPEED_DIV = 2;
+    const HUNTER_START_LIVES = 3;
+    const HUNTER_BITE_COOLDOWN_TICKS = 6;
+
+    const ZOMBIE_COUNT = 5;
+    const ZOMBIE_SPEED_DIV = HUNTER_SPEED_DIV;
+
+    const HUNTER_EAT_ZOMBIE_COOLDOWN_TICKS = 6;
+    const HUNTER_GROW_ON_ZOMBIE = 1;
+
+    const DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+
+    // UI
+    const elTime   = document.getElementById("time");
+    const elP      = document.getElementById("pLen");
+    const elH1Len  = document.getElementById("h1Len");
+    const elH2Len  = document.getElementById("h2Len");
+    const elH1Liv  = document.getElementById("h1Lives");
+    const elH2Liv  = document.getElementById("h2Lives");
+    const elZLeft  = document.getElementById("zLeft");
+    const elOrn    = document.getElementById("ornCount");
+    const elTreeHP = document.getElementById("treeHP");
+
+    const toast = document.getElementById("toast");
+    const btnStart = document.getElementById("btnStart");
+    const btnPause = document.getElementById("btnPause");
+    const btnRestart = document.getElementById("btnRestart");
+
+    const cssVar = (n)=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    const key = (x,y)=>`${x},${y}`;
+    const same = (a,b)=>a.x===b.x && a.y===b.y;
+    const inBounds = (p)=>p.x>=0 && p.x<COLS && p.y>=0 && p.y<ROWS;
+    const manhattan = (a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
+
+    function shuffle(a){
+      for(let i=a.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [a[i],a[j]]=[a[j],a[i]];
+      }
+      return a;
+    }
+
+    function showToast(msg){
+      toast.textContent = msg;
+      toast.classList.add("show");
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(()=>toast.classList.remove("show"), 1500);
+    }
+
+    // Retina scaling (keeps logical coordinate system)
+    function setupCanvasForDPR(){
+      const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+      canvas.width = Math.round(LOGICAL_W * dpr);
+      canvas.height = Math.round(LOGICAL_H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    setupCanvasForDPR();
+    window.addEventListener("resize", setupCanvasForDPR);
+
+    // State
+    let running=false, paused=false, gameOver=false, won=false;
+    let tickTimer=null, uiTimer=null;
+    let elapsedMs=0, lastResumeAt=0;
+
+    let snake=[], dir={x:1,y:0}, pendingDir=null;
+
+    const hurdles=new Set();
+    const ornaments=new Set();
+    let ornamentsEaten=0;
+
+    let tree={x:0,y:0};
+    let treeHP=2;
+
+    let zombies=[];
+    let zombieTick=0;
+    let hunterTick=0;
+
+    function makeHunter(id, color, sx, sy){
+      return {
+        id, color,
+        alive:true,
+        lives:HUNTER_START_LIVES,
+        biteCooldown:0,
+        eatZombieCooldown:0,
+        body:[
+          {x:sx,y:sy},{x:sx+1,y:sy},{x:sx+2,y:sy},{x:sx+3,y:sy}
+        ].filter(inBounds)
+      };
+    }
+
+    let hunters = [];
+
+    function addHurdleRect(x,y,w,h){
+      for(let yy=y; yy<y+h; yy++){
+        for(let xx=x; xx<x+w; xx++){
+          if(xx>=0 && xx<COLS && yy>=0 && yy<ROWS) hurdles.add(key(xx,yy));
+        }
+      }
+    }
+
+    function buildCenterTreeZone(){
+      const cx=Math.floor(COLS/2);
+      const cy=Math.floor(ROWS/2);
+      tree={x:cx,y:cy};
+
+      const r=2;
+      const gap={x:cx, y:cy-r};
+
+      for(let y=cy-r; y<=cy+r; y++){
+        for(let x=cx-r; x<=cx+r; x++){
+          const isBorder=(x===cx-r || x===cx+r || y===cy-r || y===cy+r);
+          if(!isBorder) continue;
+          if(x===cx && y===cy) continue;
+          if(x===gap.x && y===gap.y) continue;
+          hurdles.add(key(x,y));
+        }
+      }
+
+      const r2=3;
+      const spots=[];
+      for(let y=cy-r2; y<=cy+r2; y++){
+        for(let x=cx-r2; x<=cx+r2; x++){
+          const isBorder=(x===cx-r2 || x===cx+r2 || y===cy-r2 || y===cy+r2);
+          if(!isBorder) continue;
+          const k=key(x,y);
+          if(!inBounds({x,y})) continue;
+          if(hurdles.has(k)) continue;
+          if(x===cx && y===cy) continue;
+          spots.push({x,y});
+        }
+      }
+      shuffle(spots);
+      for(let i=0;i<Math.min(12, spots.length);i++){
+        ornaments.add(key(spots[i].x, spots[i].y));
+      }
+    }
+
+    function buildFourHurdles(){
+      addHurdleRect(6, 5, 7, 1);
+      addHurdleRect(COLS-13, 7, 7, 1);
+      addHurdleRect(10, ROWS-10, 1, 7);
+      addHurdleRect(COLS-11, ROWS-11, 1, 7);
+    }
+
+    function hardBlocked(x,y){ return hurdles.has(key(x,y)); }
+
+    function rebuildAvoidSet(){
+      const s=new Set();
+      for(const p of snake) s.add(key(p.x,p.y));
+      for(const h of hunters){
+        if(!h.alive) continue;
+        for(const b of h.body) s.add(key(b.x,b.y));
+      }
+      for(const z of zombies) s.add(key(z.x,z.y));
+      return s;
+    }
+
+    function randomFreeCell(avoid){
+      for(let tries=0; tries<2500; tries++){
+        const x=Math.floor(Math.random()*COLS);
+        const y=Math.floor(Math.random()*ROWS);
+        const k=key(x,y);
+        if(avoid.has(k)) continue;
+        if(hurdles.has(k)) continue;
+        if(ornaments.has(k)) continue;
+        if(x===tree.x && y===tree.y) continue;
+        return {x,y};
+      }
+      return {x:1,y:1};
+    }
+
+    function removeZombieAt(x,y){
+      const idx=zombies.findIndex(z=>z.x===x && z.y===y);
+      if(idx>=0){ zombies.splice(idx,1); return true; }
+      return false;
+    }
+
+    function placeHunterSafely(h){
+      const avoid=new Set(snake.map(p=>key(p.x,p.y)));
+      for(let tries=0; tries<80; tries++){
+        const bad=h.body.some(p =>
+          hardBlocked(p.x,p.y) ||
+          ornaments.has(key(p.x,p.y)) ||
+          (p.x===tree.x && p.y===tree.y) ||
+          avoid.has(key(p.x,p.y))
+        );
+        if(!bad) return;
+        for(const p of h.body) p.y = (p.y + 1) % ROWS;
+      }
+    }
+
+    function spawnZombies(){
+      zombies=[];
+      const ph=snake[0];
+      for(let i=0;i<ZOMBIE_COUNT;i++){
+        const avoid=rebuildAvoidSet();
+        for(let dx=-2; dx<=2; dx++){
+          for(let dy=-2; dy<=2; dy++){
+            const xx=ph.x+dx, yy=ph.y+dy;
+            if(xx>=0&&xx<COLS&&yy>=0&&yy<ROWS) avoid.add(key(xx,yy));
+          }
+        }
+        zombies.push(randomFreeCell(avoid));
+      }
+    }
+
+    function syncStats(){
+      elP.textContent = String(snake.length);
+      elH1Len.textContent = hunters[0].alive ? String(hunters[0].body.length) : "0";
+      elH2Len.textContent = hunters[1].alive ? String(hunters[1].body.length) : "0";
+      elH1Liv.textContent = String(hunters[0].lives);
+      elH2Liv.textContent = String(hunters[1].lives);
+      elZLeft.textContent = String(zombies.length);
+      elOrn.textContent = String(ornamentsEaten);
+      elTreeHP.textContent = String(Math.max(0, treeHP));
+    }
+
+    function reset(){
+      running=false; paused=false; gameOver=false; won=false;
+      clearInterval(tickTimer); tickTimer=null;
+      clearInterval(uiTimer); uiTimer=null;
+
+      elapsedMs=0; lastResumeAt=0;
+      elTime.textContent="0";
+
+      ornamentsEaten=0;
+      treeHP=2;
+
+      zombieTick=0;
+      hunterTick=0;
+
+      hurdles.clear();
+      ornaments.clear();
+      buildCenterTreeZone();
+      buildFourHurdles();
+
+      // player
+      const psx=Math.max(5, Math.floor(COLS*0.20));
+      const psy=Math.floor(ROWS*0.50);
+      snake=[{x:psx,y:psy},{x:psx-1,y:psy},{x:psx-2,y:psy}];
+      dir={x:1,y:0};
+      pendingDir=null;
+
+      // hunters
+      hunters = [
+        makeHunter("h1", cssVar("--hunter1"), Math.floor(COLS*0.80), Math.floor(ROWS*0.50)),
+        makeHunter("h2", cssVar("--hunter2"), Math.floor(COLS*0.80), Math.floor(ROWS*0.35)),
+      ];
+      placeHunterSafely(hunters[0]);
+      placeHunterSafely(hunters[1]);
+
+      spawnZombies();
+      syncStats();
+      draw();
+      showToast("Ready. Swipe or use D-pad.");
+    }
+
+    function start(){
+      if(won || gameOver) reset();
+      if(running && paused){
+        paused=false;
+        lastResumeAt=performance.now();
+        showToast("Resumed.");
+        return;
+      }
+      if(running) return;
+
+      running=true;
+      paused=false;
+      lastResumeAt=performance.now();
+
+      uiTimer=setInterval(()=>{
+        if(!running || paused || gameOver || won) return;
+        const ms = elapsedMs + (performance.now() - lastResumeAt);
+        elTime.textContent = String(Math.floor(ms/1000));
+      }, 200);
+
+      tickTimer=setInterval(tick, SPEED_MS);
+      showToast("Go!");
+    }
+
+    function pause(){
+      if(!running || gameOver || won) return;
+      paused=!paused;
+      if(paused){
+        elapsedMs += (performance.now() - lastResumeAt);
+        showToast("Paused.");
+      }else{
+        lastResumeAt=performance.now();
+        showToast("Resumed.");
+      }
+    }
+
+    function endGame(msg){
+      gameOver=true; running=false; paused=false;
+      clearInterval(tickTimer); tickTimer=null;
+      clearInterval(uiTimer); uiTimer=null;
+      showToast(msg);
+      draw();
+    }
+
+    function winGame(msg){
+      won=true; running=false; paused=false;
+      clearInterval(tickTimer); tickTimer=null;
+      clearInterval(uiTimer); uiTimer=null;
+      showToast(msg);
+      draw();
+    }
+
+    // Mobile controls
+    function setDir(nd){
+      pendingDir = nd;
+      if(!running) start();
+    }
+    function dirFromName(n){
+      if(n==="up") return {x:0,y:-1};
+      if(n==="down") return {x:0,y:1};
+      if(n==="left") return {x:-1,y:0};
+      if(n==="right") return {x:1,y:0};
+      return null;
+    }
+
+    // Swipe on board
+    let touchStartX=0, touchStartY=0;
+    board.addEventListener("touchstart", (e)=>{
+      e.preventDefault();
+      const t=e.changedTouches[0];
+      touchStartX=t.clientX; touchStartY=t.clientY;
+      if(!running) start();
+    }, {passive:false});
+
+    board.addEventListener("touchmove", (e)=>{ e.preventDefault(); }, {passive:false});
+
+    board.addEventListener("touchend", (e)=>{
+      e.preventDefault();
+      const t=e.changedTouches[0];
+      const dx=t.clientX-touchStartX, dy=t.clientY-touchStartY;
+      const dead=12;
+      if(Math.abs(dx)<dead && Math.abs(dy)<dead) return;
+      if(Math.abs(dx)>Math.abs(dy)) setDir(dx>0?{x:1,y:0}:{x:-1,y:0});
+      else setDir(dy>0?{x:0,y:1}:{x:0,y:-1});
+    }, {passive:false});
+
+    // D-pad
+    const dpad=document.getElementById("dpad");
+    function handleDpad(name){
+      if(name==="pause"){ if(!running) start(); else pause(); return; }
+      const nd=dirFromName(name);
+      if(nd) setDir(nd);
+    }
+    dpad.addEventListener("touchstart",(e)=>{
+      const b=e.target.closest("button");
+      if(!b) return;
+      e.preventDefault();
+      handleDpad(b.dataset.dir);
+    }, {passive:false});
+    dpad.addEventListener("click",(e)=>{
+      const b=e.target.closest("button");
+      if(!b) return;
+      handleDpad(b.dataset.dir);
+    });
+
+    // Buttons
+    btnStart.addEventListener("click", start);
+    btnPause.addEventListener("click", pause);
+    btnRestart.addEventListener("click", ()=>{ reset(); start(); });
+
+    // AI
+    function chooseChaseStep(from, target){
+      let best=Infinity;
+      const opts=[];
+      for(const d of DIRS){
+        const n={x:from.x+d.x,y:from.y+d.y};
+        if(!inBounds(n)) continue;
+        if(hardBlocked(n.x,n.y)) continue;
+        const sc=manhattan(n,target);
+        if(sc<best){ best=sc; opts.length=0; opts.push(n); }
+        else if(sc===best) opts.push(n);
+      }
+      if(!opts.length) return null;
+      return opts[Math.floor(Math.random()*opts.length)];
+    }
+
+    function growPlayer(n){
+      const t=snake[snake.length-1];
+      for(let i=0;i<n;i++) snake.push({x:t.x,y:t.y});
+    }
+
+    function hunterMoveOne(h){
+      if(!h.alive) return;
+      const head=h.body[0];
+
+      // Prefer adjacent zombies
+      const adj=[];
+      for(const d of DIRS){
+        const n={x:head.x+d.x,y:head.y+d.y};
+        if(!inBounds(n) || hardBlocked(n.x,n.y)) continue;
+        if(zombies.some(z=>z.x===n.x && z.y===n.y)) adj.push(n);
+      }
+
+      const next = adj.length ? adj[Math.floor(Math.random()*adj.length)]
+                              : chooseChaseStep(head, snake[0]);
+      if(!next) return;
+      h.body.unshift(next);
+      h.body.pop();
+    }
+
+    function hunterEatZombieIfOnCell(h){
+      if(!h.alive) return;
+      if(h.eatZombieCooldown>0) return;
+      const head=h.body[0];
+      if(removeZombieAt(head.x, head.y)){
+        const t=h.body[h.body.length-1];
+        for(let i=0;i<HUNTER_GROW_ON_ZOMBIE;i++) h.body.push({x:t.x,y:t.y});
+        h.eatZombieCooldown = HUNTER_EAT_ZOMBIE_COOLDOWN_TICKS;
+        showToast("A hunter ate a zombie!");
+      }
+    }
+
+    function tryHuntersBitePlayer(){
+      const pHead=snake[0];
+      for(const h of hunters){
+        if(!h.alive) continue;
+        if(h.biteCooldown>0) continue;
+
+        const hHead=h.body[0];
+        let hit=false;
+
+        for(const p of snake){
+          if(p.x===hHead.x && p.y===hHead.y){ hit=true; break; }
+        }
+        if(!hit){
+          for(const b of h.body){
+            if(b.x===pHead.x && b.y===pHead.y){ hit=true; break; }
+          }
+        }
+        if(!hit) continue;
+
+        if(snake.length<=1) return endGame("Game Over: hunters got you.");
+        snake.pop();
+        const t=h.body[h.body.length-1];
+        h.body.push({x:t.x,y:t.y});
+        h.biteCooldown = HUNTER_BITE_COOLDOWN_TICKS;
+        showToast("Hunter bite: -1 section!");
+        if(snake.length<=1) return endGame("Game Over: hunters got you.");
+      }
+    }
+
+    function zombieMoveAll(){
+      if(!zombies.length) return;
+      const aliveHunters = hunters.filter(h=>h.alive);
+
+      for(let i=0;i<zombies.length;i++){
+        const z=zombies[i];
+        let target=null;
+
+        if(aliveHunters.length){
+          let best=Infinity;
+          for(const h of aliveHunters){
+            const d=manhattan(z, h.body[0]);
+            if(d<best){ best=d; target=h.body[0]; }
+          }
+        }
+
+        let next=null;
+        if(target) next=chooseChaseStep(z, target);
+        else{
+          const opts=[];
+          for(const d of DIRS){
+            const n={x:z.x+d.x,y:z.y+d.y};
+            if(!inBounds(n)) continue;
+            if(hardBlocked(n.x,n.y)) continue;
+            opts.push(n);
+          }
+          if(opts.length) next=opts[Math.floor(Math.random()*opts.length)];
+        }
+        if(!next) continue;
+
+        const ph=snake[0];
+        if(next.x===ph.x && next.y===ph.y){
+          zombies.splice(i,1); i--;
+          growPlayer(1);
+          showToast("Zombie eaten: +1 section!");
+          continue;
+        }
+
+        z.x=next.x; z.y=next.y;
+      }
+    }
+
+    function tryZombiesHitHunters(){
+      if(!zombies.length) return;
+
+      for(const h of hunters){
+        if(!h.alive) continue;
+
+        let hit=false;
+        outer:
+        for(const z of zombies){
+          for(const b of h.body){
+            if(z.x===b.x && z.y===b.y){ hit=true; break outer; }
+          }
+        }
+        if(!hit) continue;
+
+        h.lives--;
+        if(h.lives<=0){
+          h.alive=false;
+          h.body=[];
+          showToast("A hunter was defeated!");
+          continue;
+        }
+
+        // respawn hunter body (keep lives)
+        const keepLives=h.lives;
+        const baseY = (h.id==="h1") ? Math.floor(ROWS*0.50) : Math.floor(ROWS*0.35);
+        const nh = makeHunter(h.id, h.color, Math.floor(COLS*0.80), baseY);
+        nh.lives = keepLives;
+        nh.biteCooldown = Math.max(h.biteCooldown, 8);
+        nh.eatZombieCooldown = Math.max(h.eatZombieCooldown, 8);
+        Object.assign(h, nh);
+        placeHunterSafely(h);
+        showToast("Zombies hit a hunter: -1 life!");
+      }
+    }
+
+    function tick(){
+      if(!running || paused || gameOver || won) return;
+
+      // cooldowns
+      for(const h of hunters){
+        if(h.biteCooldown>0) h.biteCooldown--;
+        if(h.eatZombieCooldown>0) h.eatZombieCooldown--;
+      }
+
+      // player input
+      if(pendingDir){ dir=pendingDir; pendingDir=null; }
+
+      // player move
+      const head=snake[0];
+      const next={x:head.x+dir.x,y:head.y+dir.y};
+      const nk=key(next.x,next.y);
+
+      if(!inBounds(next)) return endGame("Game Over: hit the wall.");
+
+      if(hurdles.has(nk)){
+        if(snake.length>1){
+          snake.pop();
+          showToast("Hurdle: -1 section");
+          syncStats();
+          draw();
+          return;
+        }
+        return endGame("Game Over: no sections left.");
+      }
+
+      snake.unshift(next);
+
+      // eat zombie
+      if(removeZombieAt(next.x, next.y)){
+        growPlayer(1);
+        showToast("Zombie eaten: +1 section!");
+      }
+
+      // ornament / tree
+      if(ornaments.has(nk)){
+        ornaments.delete(nk);
+        ornamentsEaten++;
+        showToast("Ornament: +1 section!");
+      } else if(same(next, tree)){
+        treeHP--;
+        if(treeHP<=0) return winGame("You win: tree eaten!");
+        showToast("Tree bite! One more bite.");
+      } else {
+        snake.pop();
+      }
+
+      // move hunters and zombies
+      hunterTick++;
+      zombieTick++;
+
+      if(hunterTick % HUNTER_SPEED_DIV === 0){
+        for(const h of hunters){
+          if(!h.alive) continue;
+          hunterMoveOne(h);
+          hunterEatZombieIfOnCell(h);
+        }
+      }
+
+      if(zombieTick % ZOMBIE_SPEED_DIV === 0){
+        zombieMoveAll();
+      }
+
+      tryZombiesHitHunters();
+      tryHuntersBitePlayer();
+
+      syncStats();
+      draw();
+    }
+
+    // Rendering
+    function draw(){
+      ctx.clearRect(0,0,LOGICAL_W,LOGICAL_H);
+
+      // grid
+      ctx.save();
+      ctx.strokeStyle=cssVar("--grid");
+      ctx.lineWidth=1;
+      for(let x=0;x<=COLS;x++){
+        ctx.beginPath();
+        ctx.moveTo(x*CELL+0.5,0);
+        ctx.lineTo(x*CELL+0.5,ROWS*CELL);
+        ctx.stroke();
+      }
+      for(let y=0;y<=ROWS;y++){
+        ctx.beginPath();
+        ctx.moveTo(0,y*CELL+0.5);
+        ctx.lineTo(COLS*CELL,y*CELL+0.5);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // walls
+      ctx.save();
+      ctx.strokeStyle=cssVar("--danger");
+      ctx.lineWidth=4;
+      ctx.strokeRect(2,2,LOGICAL_W-4,LOGICAL_H-4);
+      ctx.restore();
+
+      // hurdles
+      ctx.fillStyle=cssVar("--danger");
+      for(const hk of hurdles){
+        const [x,y]=hk.split(",").map(Number);
+        fillCell(x,y,2);
+      }
+
+      // ornaments
+      ctx.fillStyle=cssVar("--orn");
+      for(const ok of ornaments){
+        const [x,y]=ok.split(",").map(Number);
+        drawOrnament(x,y);
+      }
+
+      // tree
+      drawTree(tree.x, tree.y, treeHP);
+
+      // zombies
+      for(const z of zombies) drawZombie(z.x,z.y);
+
+      // hunters
+      for(const h of hunters){
+        if(!h.alive) continue;
+        for(let i=h.body.length-1;i>=0;i--){
+          const p=h.body[i];
+          drawSnakeCell(p.x,p.y,i===0,h.color);
+        }
+      }
+
+      // player
+      for(let i=snake.length-1;i>=0;i--){
+        const p=snake[i];
+        drawSnakeCell(p.x,p.y,i===0,cssVar("--player"));
+      }
+
+      // overlay
+      if(gameOver || won){
+        ctx.save();
+        ctx.fillStyle="rgba(0,0,0,0.55)";
+        ctx.fillRect(0,0,LOGICAL_W,LOGICAL_H);
+        ctx.fillStyle="#fff";
+        ctx.textAlign="center";
+        ctx.textBaseline="middle";
+        ctx.font="800 34px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+        ctx.fillText(won ? "YOU WIN" : "GAME OVER", LOGICAL_W/2, LOGICAL_H/2 - 18);
+        ctx.font="500 16px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+        ctx.fillText("Tap Restart to play again", LOGICAL_W/2, LOGICAL_H/2 + 20);
+        ctx.restore();
+      }
+    }
+
+    function fillCell(x,y,pad=1){
+      ctx.fillRect(x*CELL+pad, y*CELL+pad, CELL-2*pad, CELL-2*pad);
+    }
+
+    function drawSnakeCell(x,y,isHead,color){
+      ctx.save();
+      ctx.fillStyle=color;
+      const pad=isHead?2:3;
+      const r=isHead?6:5;
+      roundRect(x*CELL+pad, y*CELL+pad, CELL-2*pad, CELL-2*pad, r);
+      ctx.fill();
+      if(isHead){
+        ctx.fillStyle="rgba(255,255,255,0.9)";
+        ctx.beginPath();
+        ctx.arc(x*CELL + CELL*0.70, y*CELL + CELL*0.35, 2.1, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawZombie(x,y){
+      const cx=x*CELL + CELL/2;
+      const cy=y*CELL + CELL/2;
+      ctx.save();
+      ctx.fillStyle=cssVar("--zombie");
+      roundRect(x*CELL+3, y*CELL+3, CELL-6, CELL-6, 6);
+      ctx.fill();
+      ctx.fillStyle="rgba(0,0,0,0.55)";
+      ctx.beginPath(); ctx.arc(cx - CELL*0.14, cy - CELL*0.05, 2.2, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + CELL*0.14, cy - CELL*0.05, 2.2, 0, Math.PI*2); ctx.fill();
+      ctx.fillRect(cx - CELL*0.14, cy + CELL*0.14, CELL*0.28, 2);
+      ctx.restore();
+    }
+
+    function drawOrnament(x,y){
+      const cx=x*CELL + CELL/2;
+      const cy=y*CELL + CELL/2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, CELL*0.33, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle="rgba(255,255,255,0.25)";
+      ctx.fillRect(cx - CELL*0.16, cy - CELL*0.42, CELL*0.32, CELL*0.12);
+      ctx.restore();
+    }
+
+    function drawTree(x,y,hp){
+      const cx=x*CELL + CELL/2;
+      const cy=y*CELL + CELL/2;
+
+      ctx.save();
+      ctx.fillStyle="rgba(43,212,111,0.12)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, CELL*0.62, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle="rgba(170,110,60,0.95)";
+      ctx.fillRect(cx - CELL*0.10, cy + CELL*0.12, CELL*0.20, CELL*0.26);
+
+      ctx.fillStyle=cssVar("--tree");
+      tri(cx, cy - CELL*0.35, CELL*0.90, CELL*0.55);
+      tri(cx, cy - CELL*0.10, CELL*1.10, CELL*0.62);
+      tri(cx, cy + CELL*0.18, CELL*1.25, CELL*0.70);
+
+      ctx.fillStyle=cssVar("--orn");
+      star(cx, cy - CELL*0.58, CELL*0.16, 5);
+
+      ctx.fillStyle="rgba(0,0,0,0.35)";
+      roundRect(cx - CELL*0.45, cy + CELL*0.55, CELL*0.90, CELL*0.22, 6);
+      ctx.fill();
+
+      const bites=Math.max(0,hp);
+      for(let i=0;i<2;i++){
+        ctx.fillStyle = i < bites ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.25)";
+        ctx.beginPath();
+        ctx.arc(cx - CELL*0.18 + i*CELL*0.36, cy + CELL*0.66, CELL*0.06, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function tri(cx, topY, w, h){
+      ctx.beginPath();
+      ctx.moveTo(cx, topY);
+      ctx.lineTo(cx - w/2, topY + h);
+      ctx.lineTo(cx + w/2, topY + h);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function star(cx, cy, r, points){
+      const step=Math.PI/points;
+      ctx.beginPath();
+      for(let i=0;i<2*points;i++){
+        const rr=(i%2===0)?r:r*0.45;
+        const a=i*step - Math.PI/2;
+        const x=cx + Math.cos(a)*rr;
+        const y=cy + Math.sin(a)*rr;
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function roundRect(x,y,w,h,r){
+      const rr=Math.min(r,w/2,h/2);
+      ctx.beginPath();
+      ctx.moveTo(x+rr,y);
+      ctx.arcTo(x+w,y,   x+w,y+h, rr);
+      ctx.arcTo(x+w,y+h, x,  y+h, rr);
+      ctx.arcTo(x,  y+h, x,  y,   rr);
+      ctx.arcTo(x,  y,   x+w,y,   rr);
+      ctx.closePath();
+    }
+
+    // Start
+    reset();
+  </script>
+</body>
+</html>
